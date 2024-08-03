@@ -23,41 +23,13 @@ let historyIndex = -1;
 let mistakes = 0;
 const maxMistakes = 3;
 let darkMode = false;
+let hintsUsed = 0;
 
-const puzzles = {
-    easy: [
-        [5,3,0,0,7,0,0,0,0],
-        [6,0,0,1,9,5,0,0,0],
-        [0,9,8,0,0,0,0,6,0],
-        [8,0,0,0,6,0,0,0,3],
-        [4,0,0,8,0,3,0,0,1],
-        [7,0,0,0,2,0,0,0,6],
-        [0,6,0,0,0,0,2,8,0],
-        [0,0,0,4,1,9,0,0,5],
-        [0,0,0,0,8,0,0,7,9]
-    ],
-    medium: [
-        [0,0,0,2,6,0,7,0,1],
-        [6,8,0,0,7,0,0,9,0],
-        [1,9,0,0,0,4,5,0,0],
-        [8,2,0,1,0,0,0,4,0],
-        [0,0,4,6,0,2,9,0,0],
-        [0,5,0,0,0,3,0,2,8],
-        [0,0,9,3,0,0,0,7,4],
-        [0,4,0,0,5,0,0,3,6],
-        [7,0,3,0,1,8,0,0,0]
-    ],
-    hard: [
-        [0,0,0,6,0,0,4,0,0],
-        [7,0,0,0,0,3,6,0,0],
-        [0,0,0,0,9,1,0,8,0],
-        [0,0,0,0,0,0,0,0,0],
-        [0,5,0,1,8,0,0,0,3],
-        [0,0,0,3,0,6,0,4,5],
-        [0,4,0,2,0,0,0,6,0],
-        [9,0,3,0,0,0,0,0,0],
-        [0,2,0,0,0,0,1,0,0]
-    ]
+const difficulties = {
+    easy: { emptySquares: 30, maxHints: 5 },
+    medium: { emptySquares: 40, maxHints: 3 },
+    hard: { emptySquares: 50, maxHints: 1 },
+    expert: { emptySquares: 60, maxHints: 0 }
 };
 
 function createBoard() {
@@ -213,6 +185,14 @@ function getHint() {
         return;
     }
 
+    const difficulty = difficultySelect.value;
+    const maxHints = difficulties[difficulty].maxHints;
+
+    if (hintsUsed >= maxHints) {
+        message.textContent = `No more hints available in ${difficulty} mode.`;
+        return;
+    }
+
     const row = Math.floor(Array.from(gameBoard.children).indexOf(selectedCell) / 9);
     const col = Array.from(gameBoard.children).indexOf(selectedCell) % 9;
 
@@ -225,6 +205,18 @@ function getHint() {
     selectedCell.classList.add('fade-in');
     setTimeout(() => selectedCell.classList.remove('fade-in'), 500);
     addToHistory();
+
+    hintsUsed++;
+    updateHintButton();
+}
+
+function updateHintButton() {
+    const difficulty = difficultySelect.value;
+    const maxHints = difficulties[difficulty].maxHints;
+    hintBtn.textContent = `Hint (${maxHints - hintsUsed})`;
+    if (hintsUsed >= maxHints) {
+        hintBtn.disabled = true;
+    }
 }
 
 function checkSolution() {
@@ -342,11 +334,35 @@ function isValidBox(board, box) {
     return true;
 }
 
+function generatePuzzle(difficulty) {
+    const emptySquares = difficulties[difficulty].emptySquares;
+    const fullBoard = generateSolvedBoard();
+    const puzzle = JSON.parse(JSON.stringify(fullBoard));
+
+    let emptied = 0;
+    while (emptied < emptySquares) {
+        const row = Math.floor(Math.random() * 9);
+        const col = Math.floor(Math.random() * 9);
+        if (puzzle[row][col] !== 0) {
+            puzzle[row][col] = 0;
+            emptied++;
+        }
+    }
+
+    return { puzzle, solution: fullBoard };
+}
+
+function generateSolvedBoard() {
+    const board = Array(9).fill().map(() => Array(9).fill(0));
+    solve(board);
+    return board;
+}
+
 function startNewGame() {
     const difficulty = difficultySelect.value;
-    puzzle = JSON.parse(JSON.stringify(puzzles[difficulty]));
-    solution = JSON.parse(JSON.stringify(puzzle));
-    solve(solution);
+    const generated = generatePuzzle(difficulty);
+    puzzle = generated.puzzle;
+    solution = generated.solution;
     createBoard();
     message.textContent = '';
     resetTimer();
@@ -356,6 +372,9 @@ function startNewGame() {
     history = [];
     historyIndex = -1;
     updateUndoRedoButtons();
+    hintBtn.disabled = false;
+    hintsUsed = 0;
+    updateHintButton();
 }
 
 function startTimer() {
@@ -406,6 +425,54 @@ function toggleDarkMode() {
     darkModeBtn.textContent = darkMode ? 'Light Mode' : 'Dark Mode';
 }
 
+
+function handleKeyDown(event) {
+    if (!selectedCell) return;
+
+    const key = event.key;
+    const input = selectedCell.querySelector('input');
+
+    if (key >= '1' && key <= '9') {
+        if (pencilMode) {
+            updatePencilNotes(selectedCell, key);
+        } else {
+            input.value = key;
+            handleInput({ target: input });
+        }
+    } else if (key === 'Backspace' || key === 'Delete') {
+        input.value = '';
+        clearPencilNotes(selectedCell);
+        addToHistory();
+    } else if (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown') {
+        event.preventDefault();
+        moveSelection(key);
+    }
+}
+
+function moveSelection(direction) {
+    const currentIndex = Array.from(gameBoard.children).indexOf(selectedCell);
+    let newIndex;
+
+    switch (direction) {
+        case 'ArrowLeft':
+            newIndex = currentIndex > 0 ? currentIndex - 1 : currentIndex;
+            break;
+        case 'ArrowRight':
+            newIndex = currentIndex < 80 ? currentIndex + 1 : currentIndex;
+            break;
+        case 'ArrowUp':
+            newIndex = currentIndex - 9 >= 0 ? currentIndex - 9 : currentIndex;
+            break;
+        case 'ArrowDown':
+            newIndex = currentIndex + 9 < 81 ? currentIndex + 9 : currentIndex;
+            break;
+    }
+
+    if (newIndex !== currentIndex) {
+        selectCell(gameBoard.children[newIndex]);
+    }
+}
+
 checkBtn.addEventListener('click', checkSolution);
 solveBtn.addEventListener('click', solvePuzzle);
 newGameBtn.addEventListener('click', startNewGame);
@@ -414,5 +481,7 @@ undoBtn.addEventListener('click', undo);
 redoBtn.addEventListener('click', redo);
 pencilBtn.addEventListener('click', togglePencilMode);
 darkModeBtn.addEventListener('click', toggleDarkMode);
+difficultySelect.addEventListener('change', startNewGame);
+document.addEventListener('keydown', handleKeyDown);
 
 startNewGame();
