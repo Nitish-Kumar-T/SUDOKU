@@ -9,6 +9,8 @@ const pencilBtn = document.getElementById('pencil-btn');
 const difficultySelect = document.getElementById('difficulty');
 const timerDisplay = document.getElementById('timer');
 const message = document.getElementById('message');
+const mistakesDisplay = document.getElementById('mistakes');
+const darkModeBtn = document.getElementById('dark-mode-btn');
 
 let puzzle = [];
 let solution = [];
@@ -18,6 +20,9 @@ let pencilMode = false;
 let selectedCell = null;
 let history = [];
 let historyIndex = -1;
+let mistakes = 0;
+const maxMistakes = 3;
+let darkMode = false;
 
 const puzzles = {
     easy: [
@@ -61,8 +66,12 @@ function createBoard() {
         for (let j = 0; j < 9; j++) {
             const cell = document.createElement('div');
             cell.classList.add('cell');
+            if ((Math.floor(i / 3) + Math.floor(j / 3)) % 2 === 0) {
+                cell.classList.add('alternate-color');
+            }
             if (puzzle[i][j] !== 0) {
                 cell.textContent = puzzle[i][j];
+                cell.classList.add('initial');
             } else {
                 const input = document.createElement('input');
                 input.type = 'text';
@@ -77,27 +86,41 @@ function createBoard() {
     }
 }
 
+function handleInput(event) {
+    const input = event.target;
+    const value = input.value;
+    const cell = input.parentElement;
+    const index = Array.from(gameBoard.children).indexOf(cell);
+    const row = Math.floor(index / 9);
+    const col = index % 9;
+
+    if (value !== '' && (isNaN(value) || value < 1 || value > 9)) {
+        input.value = '';
+    } else if (pencilMode) {
+        updatePencilNotes(cell, value);
+        input.value = '';
+    } else {
+        clearPencilNotes(cell);
+        if (value !== '' && parseInt(value) !== solution[row][col]) {
+            mistakes++;
+            updateMistakesDisplay();
+            cell.classList.add('mistake');
+            if (mistakes >= maxMistakes) {
+                gameOver();
+            }
+        } else {
+            cell.classList.remove('mistake');
+        }
+        addToHistory();
+    }
+}
+
 function selectCell(cell) {
     if (selectedCell) {
         selectedCell.classList.remove('highlighted');
     }
     selectedCell = cell;
     cell.classList.add('highlighted');
-}
-
-function handleInput(event) {
-    const input = event.target;
-    const value = input.value;
-
-    if (value !== '' && (isNaN(value) || value < 1 || value > 9)) {
-        input.value = '';
-    } else if (pencilMode) {
-        updatePencilNotes(input.parentElement, value);
-        input.value = '';
-    } else {
-        clearPencilNotes(input.parentElement);
-        addToHistory();
-    }
 }
 
 function updatePencilNotes(cell, value) {
@@ -252,6 +275,7 @@ function solve(board) {
     }
     return true;
 }
+
 function isValid(board, row, col, num) {
     for (let i = 0; i < 9; i++) {
         if (board[row][i] === num) return false;
@@ -327,6 +351,8 @@ function startNewGame() {
     message.textContent = '';
     resetTimer();
     startTimer();
+    mistakes = 0;
+    updateMistakesDisplay();
     history = [];
     historyIndex = -1;
     updateUndoRedoButtons();
@@ -355,6 +381,31 @@ function updateTimerDisplay() {
     timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
 }
 
+function updateMistakesDisplay() {
+    mistakesDisplay.textContent = `Mistakes: ${mistakes}/${maxMistakes}`;
+}
+
+function gameOver() {
+    message.textContent = 'Game Over! You\'ve made too many mistakes.';
+    message.style.color = 'red';
+    stopTimer();
+    gameBoard.classList.add('game-over');
+    disableInputs();
+}
+
+function disableInputs() {
+    const inputs = document.querySelectorAll('.cell input');
+    inputs.forEach(input => {
+        input.disabled = true;
+    });
+}
+
+function toggleDarkMode() {
+    darkMode = !darkMode;
+    document.body.classList.toggle('dark-mode');
+    darkModeBtn.textContent = darkMode ? 'Light Mode' : 'Dark Mode';
+}
+
 checkBtn.addEventListener('click', checkSolution);
 solveBtn.addEventListener('click', solvePuzzle);
 newGameBtn.addEventListener('click', startNewGame);
@@ -362,5 +413,6 @@ hintBtn.addEventListener('click', getHint);
 undoBtn.addEventListener('click', undo);
 redoBtn.addEventListener('click', redo);
 pencilBtn.addEventListener('click', togglePencilMode);
+darkModeBtn.addEventListener('click', toggleDarkMode);
 
 startNewGame();
