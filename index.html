@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sudoku Game</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
 </head>
 <body>
     <div class="container">
-        <h1>Sudoku v2</h1>
+        <h1>Sudoku Game</h1>
         <div class="game-controls">
             <select id="difficulty">
                 <option value="easy">Easy</option>
@@ -19,6 +20,12 @@
             <div id="timer">00:00</div>
         </div>
         <div id="game-board"></div>
+        <div class="button-group">
+            <button id="hint-btn"><i class="fas fa-lightbulb"></i> Hint</button>
+            <button id="undo-btn"><i class="fas fa-undo"></i> Undo</button>
+            <button id="redo-btn"><i class="fas fa-redo"></i> Redo</button>
+            <button id="pencil-btn"><i class="fas fa-pencil-alt"></i> Pencil Mode</button>
+        </div>
         <div class="button-group">
             <button id="check-btn">Check Solution</button>
             <button id="solve-btn">Solve Puzzle</button>

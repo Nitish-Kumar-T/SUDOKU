@@ -2,6 +2,10 @@ const gameBoard = document.getElementById('game-board');
 const checkBtn = document.getElementById('check-btn');
 const solveBtn = document.getElementById('solve-btn');
 const newGameBtn = document.getElementById('new-game-btn');
+const hintBtn = document.getElementById('hint-btn');
+const undoBtn = document.getElementById('undo-btn');
+const redoBtn = document.getElementById('redo-btn');
+const pencilBtn = document.getElementById('pencil-btn');
 const difficultySelect = document.getElementById('difficulty');
 const timerDisplay = document.getElementById('timer');
 const message = document.getElementById('message');
@@ -10,6 +14,10 @@ let puzzle = [];
 let solution = [];
 let timer;
 let seconds = 0;
+let pencilMode = false;
+let selectedCell = null;
+let history = [];
+let historyIndex = -1;
 
 const puzzles = {
     easy: [
@@ -57,40 +65,151 @@ function createBoard() {
                 cell.textContent = puzzle[i][j];
             } else {
                 const input = document.createElement('input');
-                input.type = 'number';
-                input.min = 1;
-                input.max = 9;
-                input.addEventListener('input', highlightCells);
+                input.type = 'text';
+                input.maxLength = 1;
+                input.addEventListener('input', handleInput);
+                input.addEventListener('focus', () => selectCell(cell));
                 cell.appendChild(input);
             }
+            cell.addEventListener('click', () => selectCell(cell));
             gameBoard.appendChild(cell);
         }
     }
 }
 
-function highlightCells(event) {
-    const value = event.target.value;
-    const cells = document.querySelectorAll('.cell');
-    cells.forEach(cell => cell.classList.remove('highlighted'));
-    
-    if (value) {
-        cells.forEach(cell => {
-            if (cell.textContent === value || (cell.firstChild && cell.firstChild.value === value)) {
-                cell.classList.add('highlighted');
-            }
-        });
+function selectCell(cell) {
+    if (selectedCell) {
+        selectedCell.classList.remove('highlighted');
+    }
+    selectedCell = cell;
+    cell.classList.add('highlighted');
+}
+
+function handleInput(event) {
+    const input = event.target;
+    const value = input.value;
+
+    if (value !== '' && (isNaN(value) || value < 1 || value > 9)) {
+        input.value = '';
+    } else if (pencilMode) {
+        updatePencilNotes(input.parentElement, value);
+        input.value = '';
+    } else {
+        clearPencilNotes(input.parentElement);
+        addToHistory();
     }
 }
 
-function checkSolution() {
-    const inputs = document.querySelectorAll('input');
-    const currentSolution = JSON.parse(JSON.stringify(puzzle));
+function updatePencilNotes(cell, value) {
+    let pencilNotes = cell.querySelector('.pencil-notes');
+    if (!pencilNotes) {
+        pencilNotes = document.createElement('div');
+        pencilNotes.classList.add('pencil-notes');
+        cell.appendChild(pencilNotes);
+    }
 
-    inputs.forEach((input, index) => {
-        const row = Math.floor(index / 9);
-        const col = index % 9;
-        currentSolution[row][col] = parseInt(input.value) || 0;
+    const noteElement = pencilNotes.querySelector(`.pencil-note:nth-child(${value})`);
+    if (noteElement) {
+        noteElement.remove();
+    } else {
+        const note = document.createElement('div');
+        note.classList.add('pencil-note');
+        note.textContent = value;
+        pencilNotes.appendChild(note);
+    }
+}
+
+function clearPencilNotes(cell) {
+    const pencilNotes = cell.querySelector('.pencil-notes');
+    if (pencilNotes) {
+        pencilNotes.remove();
+    }
+}
+
+function addToHistory() {
+    const currentState = getBoardState();
+    history = history.slice(0, historyIndex + 1);
+    history.push(currentState);
+    historyIndex++;
+    updateUndoRedoButtons();
+}
+
+function getBoardState() {
+    const state = [];
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach(cell => {
+        if (cell.textContent) {
+            state.push(parseInt(cell.textContent));
+        } else if (cell.firstChild && cell.firstChild.tagName === 'INPUT') {
+            state.push(parseInt(cell.firstChild.value) || 0);
+        } else {
+            state.push(0);
+        }
     });
+    return state;
+}
+
+function updateUndoRedoButtons() {
+    undoBtn.disabled = historyIndex <= 0;
+    redoBtn.disabled = historyIndex >= history.length - 1;
+}
+
+function undo() {
+    if (historyIndex > 0) {
+        historyIndex--;
+        restoreBoardState(history[historyIndex]);
+        updateUndoRedoButtons();
+    }
+}
+
+function redo() {
+    if (historyIndex < history.length - 1) {
+        historyIndex++;
+        restoreBoardState(history[historyIndex]);
+        updateUndoRedoButtons();
+    }
+}
+
+function restoreBoardState(state) {
+    const cells = document.querySelectorAll('.cell');
+    cells.forEach((cell, index) => {
+        if (cell.firstChild && cell.firstChild.tagName === 'INPUT') {
+            cell.firstChild.value = state[index] || '';
+        }
+    });
+}
+
+function togglePencilMode() {
+    pencilMode = !pencilMode;
+    pencilBtn.classList.toggle('active');
+}
+
+function getHint() {
+    if (!selectedCell) {
+        message.textContent = 'Please select a cell first.';
+        return;
+    }
+
+    const row = Math.floor(Array.from(gameBoard.children).indexOf(selectedCell) / 9);
+    const col = Array.from(gameBoard.children).indexOf(selectedCell) % 9;
+
+    if (puzzle[row][col] !== 0) {
+        message.textContent = 'This cell is already filled.';
+        return;
+    }
+
+    selectedCell.querySelector('input').value = solution[row][col];
+    selectedCell.classList.add('fade-in');
+    setTimeout(() => selectedCell.classList.remove('fade-in'), 500);
+    addToHistory();
+}
+
+function checkSolution() {
+    const currentState = getBoardState();
+    const currentSolution = [];
+    for (let i = 0; i < 9; i++) {
+        currentSolution.push(currentState.slice(i * 9, (i + 1) * 9));
+    }
 
     if (isValidSolution(currentSolution)) {
         message.textContent = 'Congratulations! Your solution is correct!';
@@ -133,7 +252,6 @@ function solve(board) {
     }
     return true;
 }
-
 function isValid(board, row, col, num) {
     for (let i = 0; i < 9; i++) {
         if (board[row][i] === num) return false;
@@ -209,6 +327,9 @@ function startNewGame() {
     message.textContent = '';
     resetTimer();
     startTimer();
+    history = [];
+    historyIndex = -1;
+    updateUndoRedoButtons();
 }
 
 function startTimer() {
@@ -237,5 +358,9 @@ function updateTimerDisplay() {
 checkBtn.addEventListener('click', checkSolution);
 solveBtn.addEventListener('click', solvePuzzle);
 newGameBtn.addEventListener('click', startNewGame);
+hintBtn.addEventListener('click', getHint);
+undoBtn.addEventListener('click', undo);
+redoBtn.addEventListener('click', redo);
+pencilBtn.addEventListener('click', togglePencilMode);
 
 startNewGame();
